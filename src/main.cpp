@@ -3,6 +3,7 @@
 const int LDR_PIN = A0;
 const int LED_PIN = 9;             // use pin labeled 9 or ~9
 const long BAUD_RATE = 9600;
+const int ACTIVATION_LEVEL = 55;   // higher = needs more cover before LED brightens
 
 // For wiring: 5V -> LDR -> A0 -> 10k -> GND
 // true  = darker -> brighter LED
@@ -42,7 +43,13 @@ void loop() {
   long scaled = (long)(ldrValue - minSeen) * 255L;  // avoid 16-bit overflow on AVR
   int normalized = (int)(scaled / span);
   normalized = constrain(normalized, 0, 255);
-  int brightness = USE_INVERTED_RESPONSE ? (255 - normalized) : normalized;
+
+  int level = USE_INVERTED_RESPONSE ? (255 - normalized) : normalized;
+  level = constrain(level - ACTIVATION_LEVEL, 0, 255 - ACTIVATION_LEVEL);
+  level = (int)((long)level * 255L / (255 - ACTIVATION_LEVEL));  // stretch back to full range
+
+  // Non-linear response: small changes near ambient produce less visible brightness.
+  int brightness = (int)((long)level * (long)level / 255L);
   brightness = constrain(brightness, 0, 255);
 
   analogWrite(LED_PIN, brightness);
@@ -55,6 +62,8 @@ void loop() {
   Serial.print(maxSeen);
   Serial.print("  pwm=");
   Serial.print(brightness);
+  Serial.print("  level=");
+  Serial.print(level);
   Serial.print("  mode=");
   Serial.println(USE_INVERTED_RESPONSE ? "inverted" : "normal");
 
