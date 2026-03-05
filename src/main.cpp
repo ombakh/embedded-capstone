@@ -2,8 +2,11 @@
 
 const int LDR_PIN = A0;
 const int LED_PIN = 9;             // use pin labeled 9 or ~9
+const int SOLENOID_PIN = 8;        // drives MOSFET gate (through 100-220 ohm resistor)
 const long BAUD_RATE = 9600;
 const int ACTIVATION_LEVEL = 55;   // higher = needs more cover before LED brightens
+const int SOLENOID_ON_LEVEL = 170; // 0..255 level where solenoid turns on
+const int SOLENOID_OFF_LEVEL = 130;// lower than ON level to prevent chatter
 
 // For wiring: 5V -> LDR -> A0 -> 10k -> GND
 // true  = darker -> brighter LED
@@ -12,12 +15,15 @@ const bool USE_INVERTED_RESPONSE = true;
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
+  pinMode(SOLENOID_PIN, OUTPUT);
+  digitalWrite(SOLENOID_PIN, LOW);  // keep solenoid off at boot
   Serial.begin(BAUD_RATE);
 
   // Arduino Mega does not require waiting for Serial, but this gives monitor time to attach.
   delay(500);
   Serial.println("LDR diagnostic starting...");
   Serial.println("Cover/uncover the photoresistor and watch raw values change.");
+  Serial.println("Solenoid control uses MOSFET on pin 8 with hysteresis.");
   Serial.println("Startup LED PWM sweep (0->255->0)...");
 
   // Quick hardware check: LED should visibly fade up/down here.
@@ -34,6 +40,7 @@ void setup() {
 void loop() {
   static int minSeen = 1023;
   static int maxSeen = 0;
+  static bool solenoidOn = false;
 
   int ldrValue = analogRead(LDR_PIN);  // 0..1023
   if (ldrValue < minSeen) minSeen = ldrValue;
@@ -54,6 +61,13 @@ void loop() {
 
   analogWrite(LED_PIN, brightness);
 
+  if (!solenoidOn && level >= SOLENOID_ON_LEVEL) {
+    solenoidOn = true;
+  } else if (solenoidOn && level <= SOLENOID_OFF_LEVEL) {
+    solenoidOn = false;
+  }
+  digitalWrite(SOLENOID_PIN, solenoidOn ? HIGH : LOW);
+
   Serial.print("raw=");
   Serial.print(ldrValue);
   Serial.print("  min=");
@@ -65,7 +79,9 @@ void loop() {
   Serial.print("  level=");
   Serial.print(level);
   Serial.print("  mode=");
-  Serial.println(USE_INVERTED_RESPONSE ? "inverted" : "normal");
+  Serial.print(USE_INVERTED_RESPONSE ? "inverted" : "normal");
+  Serial.print("  solenoid=");
+  Serial.println(solenoidOn ? "ON" : "OFF");
 
   if (ldrValue < 5 || ldrValue > 1018) {
     Serial.println("Warning: reading near limit. Check divider wiring at A0.");
